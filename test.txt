@@ -1,0 +1,98 @@
+static void CopyOneRowTo(CopyState cstate, Oid tupleOid, Datum* values, const bool* nulls)
+{
+    bool need_delim = false;  // 标志是否需要添加分隔符
+    FmgrInfo* out_functions = cstate->out_functions;  // 输出函数的信息
+    MemoryContext oldcontext;  // 保存旧的内存上下文
+    ListCell* cur = NULL;  // 遍历属性列表的指针
+    char* string = NULL;  // 临时字符串
+
+    // 重置行内存上下文，切换到行内存上下文
+    MemoryContextReset(cstate->rowcontext);
+    oldcontext = MemoryContextSwitchTo(cstate->rowcontext);
+
+    if (IS_BINARY(cstate)) {
+        // 对于二进制格式，发送元组的二进制头部信息
+        CopySendInt16(cstate, list_length(cstate->attnumlist));
+        // 如果需要，发送 OID
+        if (cstate->oids) {
+            // 假设 Oid 和 int32 大小相同
+            CopySendInt32(cstate, sizeof(int32));
+            CopySendInt32(cstate, tupleOid);
+        }
+    } else if (cstate->oids) {
+        // 对于文本格式，如果需要，发送 OID
+        // 假设数字不需要引用或编码转换
+        string = DatumGetCString(DirectFunctionCall1(oidout, ObjectIdGetDatum(tupleOid)));
+        CopySendString(cstate, string);
+        need_delim = true;
+    }
+	
+11111111111111111111111111111111111111111111111111111111111111
+2222222222222222222222222222222222222222222
+33333333333333333333333333
+44444444444444
+55555555
+6666
+7
+	// 是否为固定列宽
+    if (IS_FIXED(cstate))
+        FixedRowOut(cstate, values, nulls);
+    else {
+        // 遍历属性列表
+        foreach (cur, cstate->attnumlist) {
+            int attnum = lfirst_int(cur);  // 属性序号
+            Datum value = values[attnum - 1];  // 属性值
+            bool isnull = nulls[attnum - 1];  // 是否为 NULL 值
+
+            if (cstate->fileformat == FORMAT_CSV || cstate->fileformat == FORMAT_TEXT) {
+                // 对于 CSV 或文本格式，添加分隔符
+                if (need_delim)
+                    CopySendString(cstate, cstate->delim);
+                need_delim = true;
+            }
+
+            if (isnull) {
+                // 处理 NULL 值
+                switch (cstate->fileformat) {
+                    case FORMAT_CSV:
+                    case FORMAT_TEXT:
+                        CopySendString(cstate, cstate->null_print_client);
+                        break;
+                    case FORMAT_BINARY:
+                        CopySendInt32(cstate, -1);
+                        break;
+                    default:
+                        ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("Invalid file format")));
+                }
+            } else {
+                if (!IS_BINARY(cstate)) {
+                    // 非二进制格式，将值转换为字符串并处理
+                    string = OutputFunctionCall(&out_functions[attnum - 1], value);
+                    switch (cstate->fileformat) {
+                        case FORMAT_CSV:
+                            CopyAttributeOutCSV(cstate,
+                                string,
+                                cstate->force_quote_flags[attnum - 1],
+                                list_length(cstate->attnumlist) == 1);
+                            break;
+                        case FORMAT_TEXT:
+                            CopyAttributeOutText(cstate, string);
+                            break;
+                        default:
+                            ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("Invalid file format")));
+                    }
+                } else {
+                    // 二进制格式，调用输出函数并发送数据
+                    bytea* outputbytes = NULL;
+                    outputbytes = SendFunctionCall(&out_functions[attnum - 1], value);
+                    CopySendInt32(cstate, VARSIZE(outputbytes) - VARHDRSZ);
+                    CopySendData(cstate, VARDATA(outputbytes), VARSIZE(outputbytes) - VARHDRSZ);
+                }
+            }
+        }
+    }
+
+    // 发送行数据，并切换回旧的内存上下文
+    cstate->writelineFunc(cstate);
+    (void)MemoryContextSwitchTo(oldcontext);
+}
