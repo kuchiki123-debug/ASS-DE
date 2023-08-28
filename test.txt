@@ -4,11 +4,21 @@ static void CopyOneRowTo(CopyState cstate, Oid tupleOid, Datum* values, const bo
     FmgrInfo* out_functions = cstate->out_functions;  // 输出函数的信息
     MemoryContext oldcontext;  // 保存旧的内存上下文
     ListCell* cur = NULL;  // 遍历属性列表的指针
-    char* string = NULL;  // 临时字符串
 
-    // 重置行内存上下文，切换到行内存上下文
     MemoryContextReset(cstate->rowcontext);
-    oldcontext = MemoryContextSwitchTo(cstate->rowcontext);
+    oldcontext = MemoryContextSwitchTo(cstate->rowcontext);    MemoryContext oldcontext;  // 保存旧的内存上下文
+    ListCell* cur = NULL;  // 遍历属性列表的指针
+
+    MemoryContextReset(cstate->rowcontext);    MemoryContext oldcontext;  // 保存旧的内存上下文
+    ListCell* cur = NULL;  // 遍历属性列表的指针
+
+    MemoryContextReset(cstate->rowcontext);    MemoryContext oldcontext;  // 保存旧的内存上下文
+    ListCell* cur = NULL;  // 遍历属性列表的指针
+
+    MemoryContextReset(cstate->rowcontext);    MemoryContext oldcontext;  // 保存旧的内存上下文
+    ListCell* cur = NULL;  // 遍历属性列表的指针
+
+    MemoryContextReset(cstate->rowcontext);
 
     if (IS_BINARY(cstate)) {
         // 对于二进制格式，发送元组的二进制头部信息
